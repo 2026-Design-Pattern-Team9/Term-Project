@@ -1,0 +1,5 @@
+# 원본 소스는 CRLF — 저장소에는 LF로 정규화해 OS 간 diff 노이즈 방지
+* text=auto
+*.jar binary
+gradlew text eol=lf
+*.bat text eol=crlf
