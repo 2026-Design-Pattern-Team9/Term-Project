@@ -99,7 +99,23 @@ public final class Resident implements Cell
 	}
 
 	public void userClicked(Point here, Rectangle surface)
-	{	amAlive = !amAlive;
+	{	setAlive(0, 0, !amAlive);
+	}
+
+	/** 단일 셀에서 조회할 수 있는 좌표는 (0, 0)이다. */
+	public boolean isAlive(int row, int column)
+	{
+		assert row == 0 && column == 0;
+		return amAlive;
+	}
+
+	/** 화면이나 입력 이벤트 없이 한 칸의 현재 상태를 설정한다. */
+	public boolean setAlive(int row, int column, boolean alive)
+	{
+		assert row == 0 && column == 0;
+		boolean changed = amAlive != alive;
+		amAlive = willBeAlive = alive;
+		return changed;
 	}
 
 	public void	   clear()			{amAlive = willBeAlive = false; }

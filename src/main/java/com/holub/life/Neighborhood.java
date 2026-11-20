@@ -10,7 +10,6 @@ import com.holub.io.Files;
 import com.holub.life.Cell;
 import com.holub.ui.MenuSite;
 import com.holub.ui.Colors;
-import com.holub.asynch.ConditionVariable;
 
 import com.holub.life.Cell;
 import com.holub.life.Clock;
@@ -35,14 +34,6 @@ import com.holub.life.Storable;
 
 public final class Neighborhood implements Cell
 {
-	/** Block if reading is not permitted because the grid is
-	 *  transitioning to the next state. Only one lock is
-	 *  used (for the outermost neighborhood) since all updates
-	 *  must be requested through the outermost neighborhood.
-	 */
-	private static final ConditionVariable readingPermitted =
-											new ConditionVariable(true);
-
 	/** Returns true only if none of the cells in the Neighborhood
 	 *  changed state during the last transition.
 	 */
@@ -251,21 +242,9 @@ public final class Neighborhood implements Cell
 	 *  @see #figureNextState
 	 */
 	public boolean transition()
-	{	
-		// The condition variable is set and reset only by the
-		// outermost neighborhood. It's actually incorrect
-		// for an inner block to touch it because the whole
-		// board has to be locked for edge cells in a subblock
-		// to compute their next state correctly. There's no
-		// race condition since the only place that transition()
-		// is called is from the clock tick, and recursively
-		// from here. As long as the recompute time is less
-		// than the tick interval, everything's copacetic.
-
+	{
+		// 보드 전체의 읽기와 갱신은 BoardModel에서 조정한다.
 		boolean someSubcellChangedState = false;
-
-		if( ++nestingLevel == 0 )
-			readingPermitted.set(false);
 
 		activeEdges.clear();							/*(1)*/
 
@@ -277,21 +256,8 @@ public final class Neighborhood implements Cell
 				}								 //{=transition.end}
 			}
 		
-		if( nestingLevel-- == 0 )
-			readingPermitted.set(true);
-
 		return someSubcellChangedState;
 	}
-	// The following variable is used only by the transition()
-	// method. Since Java doesn't support static local variables,
-	// I am forced to declare it in class scope, but I deliberately
-	// don't put it up at the top of the class defintion because
-	// it's not really an attribute of the class---it's just
-	// an implemenation detail of the immediately preceding
-	// method.
-	//
-	private static int nestingLevel = -1;
-
 
 	/** Modifies activeEdges to indicate whether the addition
 	 *  of the cell at (row,column) makes an edge active.
@@ -345,48 +311,26 @@ public final class Neighborhood implements Cell
 			
 		if( !amActive && !oneLastRefreshRequired && !drawAll )
 			return;
-		try
-		{
-			oneLastRefreshRequired = false;
-			int compoundWidth = here.width;
-			Rectangle subcell = new Rectangle(	here.x, here.y,
-											here.width  / gridSize,
-											here.height / gridSize );
-
-			// Check to see if we can paint. If not, just return. If
-			// so, actually wait for permission (in case there's
-			// a race condition, then paint.
-
-			if( !readingPermitted.isTrue() )	//{=Neighborhood.reading.not.permitted}
-				return;
-
-			readingPermitted.waitForTrue();
-
-			for( int row = 0; row < gridSize; ++row )
-			{   for( int column = 0; column < gridSize; ++column )
-				{   grid[row][column].redraw( g, subcell, drawAll );	// {=Neighborhood.redraw3}
-				    subcell.translate( subcell.width, 0);
-				}
-				subcell.translate(-compoundWidth, subcell.height);
+		oneLastRefreshRequired = false;
+		int compoundWidth = here.width;
+		Rectangle subcell = new Rectangle(here.x, here.y,
+				here.width / gridSize, here.height / gridSize);
+		for (int row = 0; row < gridSize; row++) {
+			for (int column = 0; column < gridSize; column++) {
+				grid[row][column].redraw(g, subcell, drawAll); // {=Neighborhood.redraw3}
+				subcell.translate(subcell.width, 0);
 			}
-
-			g = g.create();
-			g.setColor( Colors.LIGHT_ORANGE );
-			g.drawRect( here.x, here.y, here.width, here.height );
-
-			if( amActive )
-			{	g.setColor( Color.BLUE );
-				g.drawRect(	here.x+1,	  here.y+1,
-							here.width-2, here.height-2 );
-			}
-
-			g.dispose();
+			subcell.translate(-compoundWidth, subcell.height);
 		}
-		catch( InterruptedException e ) 
-		{	// thrown from waitForTrue. Just
-			// ignore it, since not printing is a
-			// reasonable reaction to an interrupt.
+
+		g = g.create();
+		g.setColor(Colors.LIGHT_ORANGE);
+		g.drawRect(here.x, here.y, here.width, here.height);
+		if (amActive) {
+			g.setColor(Color.BLUE);
+			g.drawRect(here.x + 1, here.y + 1, here.width - 2, here.height - 2);
 		}
+		g.dispose();
 	}
 
 	/** Return the edge cell in the indicated row and column.
@@ -404,19 +348,33 @@ public final class Neighborhood implements Cell
 	 */
 	public void userClicked(Point here, Rectangle surface)
 	{
-		int pixelsPerCell = surface.width / gridSize ;
-		int row				= here.y     	/ pixelsPerCell ;
-		int column			= here.x     	/ pixelsPerCell ;
-		int rowOffset		= here.y     	% pixelsPerCell ;
-		int columnOffset	= here.x     	% pixelsPerCell ;
+		int pixelsPerCell = surface.width / widthInCells();
+		int row = here.y / pixelsPerCell;
+		int column = here.x / pixelsPerCell;
+		setAlive(row, column, !isAlive(row, column)); //{=Neighborhood.userClicked.call}
+	}
 
-		Point position = new Point( columnOffset, rowOffset );
-		Rectangle subcell = new Rectangle(	0, 0, pixelsPerCell,
-												  pixelsPerCell );
+	/** 몫으로 자식 블록을 선택하고 나머지로 그 안의 좌표를 구한다. */
+	public boolean isAlive(int row, int column)
+	{
+		int childSize = grid[0][0].widthInCells();
+		Cell child = grid[row / childSize][column / childSize];
+		return child.isAlive(row % childSize, column % childSize);
+	}
 
-		grid[row][column].userClicked(position, subcell); //{=Neighborhood.userClicked.call}
+	/** 바뀐 셀에서 부모 블록까지 올라가며 다음 세대에 다시 계산할 영역을 표시한다. */
+	public boolean setAlive(int row, int column, boolean alive)
+	{
+		int childSize = grid[0][0].widthInCells();
+		int childRow = row / childSize;
+		int childColumn = column / childSize;
+		Cell child = grid[childRow][childColumn];
+		if (!child.setAlive(row % childSize, column % childSize, alive)) {
+			return false;
+		}
 		amActive = true;
-		rememberThatCellAtEdgeChangedState(row, column);
+		rememberThatCellAtEdgeChangedState(childRow, childColumn);
+		return true;
 	}
 
 	public boolean isAlive()
@@ -449,14 +407,16 @@ public final class Neighborhood implements Cell
 
 		for( int row = 0; row < gridSize; ++row )
 		{   for( int column = 0; column < gridSize; ++column )
-			{	if(grid[row][column].transfer(memento,upperLeft,load))
-					amActive = true;
-
-				Direction d =
-						grid[row][column].isDisruptiveTo();
-
-				if( !d.equals( Direction.NONE ) )
-					activeEdges.add(d);
+			{
+				Cell child = grid[row][column];
+				boolean childActive = child.transfer(memento, upperLeft, load);
+				// 저장은 현재 배치만 읽으며 계산 대상 블록을 바꾸지 않는다.
+				if (load) {
+					if (childActive) {
+						amActive = true;
+					}
+					activeEdges.add(child.isDisruptiveTo());
+				}
 
 				upperLeft.translate( subcellWidth, 0);
 			}
@@ -471,6 +431,19 @@ public final class Neighborhood implements Cell
 		return m;
 	}
 
+	/** 읽기에 성공한 뒤 보드를 교체하고 배치한 셀 주변을 다시 계산하도록 표시한다. */
+	void load(InputStream in) throws IOException
+	{
+		NeighborhoodState saved = new NeighborhoodState(in);
+		int size = widthInCells();
+		clear();
+		for (Point point : saved.liveCells) {
+			if (point.x >= 0 && point.x < size && point.y >= 0 && point.y < size) {
+				setAlive(point.y, point.x, true);
+			}
+		}
+	}
+
 	/**
 	 * The NeighborhoodState stores the state of this neighborhood
 	 * and all its sub-neighborhoods. For the moment, I'm storing
@@ -479,7 +452,7 @@ public final class Neighborhood implements Cell
 	 */
 
 	private static class NeighborhoodState implements Cell.Memento
-	{	Collection liveCells = new LinkedList();
+	{	Collection<Point> liveCells = new LinkedList<>();
 
 		public NeighborhoodState( InputStream in ) throws IOException
 												{ load(in); }
@@ -488,7 +461,18 @@ public final class Neighborhood implements Cell
 		public void load( InputStream in ) throws IOException
 		{	try
 			{	ObjectInputStream source = new ObjectInputStream( in );
-				liveCells = (Collection)( source.readObject() );
+				Object data = source.readObject();
+				if (!(data instanceof Collection<?> cells)) {
+					throw new IOException("Invalid Life file");
+				}
+				Collection<Point> loadedCells = new LinkedList<>();
+				for (Object cell : cells) {
+					if (!(cell instanceof Point point)) {
+						throw new IOException("Invalid cell in Life file");
+					}
+					loadedCells.add(point);
+				}
+				liveCells = loadedCells;
 			}
 			catch(ClassNotFoundException e)
 			{	// This exception shouldn't be rethrown as

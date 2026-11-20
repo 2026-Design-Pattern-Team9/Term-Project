@@ -64,6 +64,12 @@ public interface Cell
 	 */
 	boolean isAlive();
 
+	/** 현재 블록을 기준으로 행·열 위치에 있는 실제 셀의 상태를 읽는다. */
+	boolean isAlive(int row, int column);
+
+	/** 지정한 칸의 생사 상태를 바꾸고, 실제로 바뀌었으면 true를 반환한다. */
+	boolean setAlive(int row, int column, boolean alive);
+
 	/** Return the specified width plus the current cell's width
 	 */
 	int widthInCells();
@@ -142,6 +148,8 @@ public interface Cell
 
 		public Cell		 edge(int r, int c)	{return this;  			  }
 		public boolean	 isAlive()		   	{return false; 			  }
+		public boolean isAlive(int row, int column) { return false; }
+		public boolean setAlive(int row, int column, boolean alive) { return false; }
 		public Cell 	 create()	   	   	{return this;			  }
 		public Direction isDisruptiveTo()	{return Direction.NONE;	  }
 		public void 	 clear()		   	{						  }
