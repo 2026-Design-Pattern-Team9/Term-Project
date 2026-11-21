@@ -26,6 +26,18 @@ public final class Resident implements Cell
 	private boolean amAlive 	= false;
 	private boolean willBeAlive	= false;
 
+	/** 같은 보드의 셀들이 함께 보는 규칙. */
+	private final RuleHolder rules;
+
+	/** 보드에 속하지 않은 셀은 원본과 같은 Conway 규칙을 따른다. */
+	public Resident()
+	{	this( new RuleHolder(Rules.CONWAY) );
+	}
+
+	Resident( RuleHolder rules )
+	{	this.rules = rules;
+	}
+
 	private boolean isStable(){return amAlive == willBeAlive; }
 
 	/** figure the next state.
@@ -58,7 +70,7 @@ public final class Resident implements Cell
 		if( southeast.isAlive()) ++neighbors;
 		if( southwest.isAlive()) ++neighbors;
 
-		willBeAlive = (neighbors==3 || (amAlive && neighbors==2));
+		willBeAlive = rules.get().nextState(amAlive, neighbors);
 		return !isStable();
 	}
 
@@ -120,7 +132,7 @@ public final class Resident implements Cell
 
 	public void	   clear()			{amAlive = willBeAlive = false; }
 	public boolean isAlive()		{return amAlive;			    }
-	public Cell    create()			{return new Resident();			}
+	public Cell    create()			{return new Resident(rules);			}
 	public int 	   widthInCells()	{return 1;}
 
 	public Direction isDisruptiveTo()

@@ -14,20 +14,36 @@ import java.util.Objects;
 public final class BoardModel {
     private static final int BLOCK_SIZE = 8;
 
+    private final RuleHolder rules = new RuleHolder(Rules.CONWAY);
     private final Neighborhood board;
     private final List<StepListener> stepListeners = new ArrayList<>();
     private long generation;
 
     public BoardModel() {
-        this(createBoard());
+        // 원형 셀이 복제되면서 모든 셀이 이 모델의 규칙 홀더를 넘겨받는다.
+        board = new Neighborhood(BLOCK_SIZE, new Neighborhood(BLOCK_SIZE, new Resident(rules)));
     }
 
-    BoardModel(Neighborhood board) {
-        this.board = board;
+    /** 기존 화면이 같은 보드를 그릴 때 사용한다. */
+    Neighborhood board() {
+        return board;
     }
 
-    static Neighborhood createBoard() {
-        return new Neighborhood(BLOCK_SIZE, new Neighborhood(BLOCK_SIZE, new Resident()));
+    public synchronized Rule rule() {
+        return rules.get();
+    }
+
+    /**
+     * 다음 세대부터 적용할 규칙을 바꾼다. 현재 배치와 세대 번호는 그대로다.
+     * 보드는 변화가 없는 블록의 계산을 건너뛰므로, 멈춰 있던 배치도 새 규칙으로
+     * 다시 계산되도록 살아 있는 셀 주변을 계산 대상으로 표시한다.
+     */
+    public synchronized void setRule(Rule rule) {
+        if (rule.equals(rules.get())) {
+            return;
+        }
+        rules.set(rule);
+        restore(snapshot());
     }
 
     public int size() {
