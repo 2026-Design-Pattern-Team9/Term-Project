@@ -43,6 +43,27 @@ class GenerationHistoryTest {
     }
 
     @Test
+    void doesNotTreatAMovingGliderAsARepeatingBoard() {
+        BoardModel model = new BoardModel();
+        setAlive(model,
+                new Point(1, 0),
+                new Point(2, 1),
+                new Point(0, 2),
+                new Point(1, 2),
+                new Point(2, 2));
+
+        GenerationHistory history = new GenerationHistory(8, model.snapshot());
+        model.addStepListener(history);
+
+        for (int generation = 0; generation < 4; generation++) {
+            assertTrue(model.step());
+        }
+
+        // 모양은 반복되어도 위치가 달라졌으므로 같은 보드 배치가 아니다.
+        assertTrue(history.period().isEmpty());
+    }
+
+    @Test
     void undoRestoresBoardAndGenerationAndNewStepBranchesHistory() {
         BoardModel model = new BoardModel();
         setAlive(model, new Point(8, 6), new Point(8, 7), new Point(8, 8));
