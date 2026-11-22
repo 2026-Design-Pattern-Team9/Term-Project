@@ -9,34 +9,16 @@ import java.awt.event.*;
 import com.holub.io.Files;
 import com.holub.ui.MenuSite;
 
-import com.holub.life.Cell;
-import com.holub.life.Storable;
-import com.holub.life.Clock;
-import com.holub.life.Neighborhood;
-import com.holub.life.Resident;
-
 /**
- * The Universe is a mediator that sits between the Swing
- * event model and the Life classes. It is also a singleton,
- * accessed via Universe.instance(). It handles all
- * Swing events and translates them into requests to the
- * outermost Neighborhood. It also creates the Composite
- * Neighborhood.
+ * Swing 입력을 모델에 전달하고 기존 보드를 그리는 패널.
  *
  * @include /etc/license.txt
  */
-
 public class Universe extends JPanel
-{	private 		final Cell  	outermostCell;
-	private static	final Universe 	theInstance = new Universe();
-
-	/** The default height and width of a Neighborhood in cells.
-	 *  If it's too big, you'll run too slowly because
-	 *  you have to update the entire block as a unit, so there's more
-	 *  to do. If it's too small, you have too many blocks to check.
-	 *  I've found that 8 is a good compromise.
-	 */
-	private static final int  DEFAULT_GRID_SIZE = 8;
+{
+	private final Neighborhood boardToDraw;
+	private final BoardModel model;
+	private static final Universe theInstance = new Universe();
 
 	/** The size of the smallest "atomic" cell---a Resident object.
 	 *  This size is extrinsic to a Resident (It's passed into the
@@ -44,27 +26,16 @@ public class Universe extends JPanel
 	 */
 	private static final int  DEFAULT_CELL_SIZE = 8;
 
-	// The constructor is private so that the universe can be created
-	// only by an outer-class method [Neighborhood.createUniverse()].
-
 	private Universe()
-	{	// Create the nested Cells that comprise the "universe." A bug
-		// in the current implementation causes the program to fail
-		// miserably if the overall size of the grid is too big to fit
-		// on the screen.
-
-		outermostCell = new Neighborhood
-						(	DEFAULT_GRID_SIZE,
-							new Neighborhood
-							(	DEFAULT_GRID_SIZE,
-								new Resident()
-							)
-						);
+	{
+		// 같은 보드를 모델이 갱신하고 패널은 기존 그리기 방식으로 표시한다.
+		boardToDraw = BoardModel.createBoard();
+		model = new BoardModel(boardToDraw);
 
 		final Dimension PREFERRED_SIZE =
 						new Dimension
-						(  outermostCell.widthInCells() * DEFAULT_CELL_SIZE,
-						   outermostCell.widthInCells() * DEFAULT_CELL_SIZE
+						(  model.size() * DEFAULT_CELL_SIZE,
+						   model.size() * DEFAULT_CELL_SIZE
 						);
 
 		addComponentListener
@@ -74,11 +45,11 @@ public class Universe extends JPanel
 					// Make sure that the cells fit evenly into the
 					// total grid size so that each cell will be the
 					// same size. For example, in a 64x64 grid, the
-					// total size must be an even multiple of 63.
+					// total size must be a multiple of 64.
 
 					Rectangle bounds = getBounds();
-					bounds.height /= outermostCell.widthInCells();
-					bounds.height *= outermostCell.widthInCells();
+					bounds.height /= model.size();
+					bounds.height *= model.size();
 					bounds.width  =  bounds.height;
 					setBounds( bounds );
 				}
@@ -93,11 +64,18 @@ public class Universe extends JPanel
 
 		addMouseListener					//{=Universe.mouse}
 		(	new MouseAdapter()
-			{	public void mousePressed(MouseEvent e)
-				{	Rectangle bounds = getBounds();
-					bounds.x = 0;
-					bounds.y = 0;
-					outermostCell.userClicked(e.getPoint(),bounds);
+			{
+				public void mousePressed(MouseEvent e)
+				{
+					// 픽셀 위치를 행·열로 바꾸고 격자 밖 입력은 무시한다.
+					int pixelsPerCell = getWidth() / model.size();
+					int boardPixels = pixelsPerCell * model.size();
+					int x = e.getX();
+					int y = e.getY();
+					if (x < 0 || y < 0 || x >= boardPixels || y >= boardPixels) {
+						return;
+					}
+					model.toggleCell(y / pixelsPerCell, x / pixelsPerCell);
 					repaint();
 				}
 			}
@@ -106,7 +84,7 @@ public class Universe extends JPanel
 		MenuSite.addLine( this, "Grid", "Clear",
 			new ActionListener()
 			{	public void actionPerformed(ActionEvent e)
-				{	outermostCell.clear();
+				{	model.clear();
 					repaint();
 				}
 			}
@@ -140,67 +118,53 @@ public class Universe extends JPanel
 		);
 
 		Clock.instance().addClockListener //{=Universe.clock.subscribe}
-		(	new Clock.Listener()
-			{	public void tick()
-				{	if( outermostCell.figureNextState
-						   ( Cell.DUMMY,Cell.DUMMY,Cell.DUMMY,Cell.DUMMY,
-							 Cell.DUMMY,Cell.DUMMY,Cell.DUMMY,Cell.DUMMY
-						   )
-					  )
-					{	if( outermostCell.transition() )
-							refreshNow();
+		(
+			new Clock.Listener()
+			{
+				public void tick()
+				{
+					if (model.step()) {
+						refreshNow();
 					}
 				}
 			}
 		);
 	}
 
-	/** Singleton Accessor. The Universe object itself is manufactured
-	 *  in Neighborhood.createUniverse()
-	 */
-
 	public static Universe instance()
-	{	return theInstance;
+	{
+		return theInstance;
+	}
+
+	/** 메뉴와 추가 기능은 같은 모델을 사용한다. */
+	public BoardModel model()
+	{
+		return model;
 	}
 
 	private void doLoad()
-	{	try
-		{
-			FileInputStream in = new FileInputStream(
-			   Files.userSelected(".",".life","Life File","Load"));
-
-			Clock.instance().stop();		// stop the game and
-			outermostCell.clear();			// clear the board.
-
-			Storable memento = outermostCell.createMemento();
-			memento.load( in );
-			outermostCell.transfer( memento, new Point(0,0), Cell.LOAD );
-
-			in.close();
+	{
+		try (FileInputStream in = new FileInputStream(
+				Files.userSelected(".", ".life", "Life File", "Load"))) {
+			Clock.instance().stop();
+			model.load(in);
 		}
-		catch( IOException theException )
-		{	JOptionPane.showMessageDialog( null, "Read Failed!",
+		catch (IOException e) {
+			JOptionPane.showMessageDialog(null, "Read Failed!",
 					"The Game of Life", JOptionPane.ERROR_MESSAGE);
 		}
 		repaint();
 	}
 
 	private void doStore()
-	{	try
-		{
-			FileOutputStream out = new FileOutputStream(
-				  Files.userSelected(".",".life","Life File","Write"));
-
-			Clock.instance().stop();		// stop the game
-
-			Storable memento = outermostCell.createMemento();
-			outermostCell.transfer( memento, new Point(0,0), Cell.STORE );
-			memento.flush(out);
-
-			out.close();
+	{
+		try (FileOutputStream out = new FileOutputStream(
+				Files.userSelected(".", ".life", "Life File", "Write"))) {
+			Clock.instance().stop();
+			model.store(out);
 		}
-		catch( IOException theException )
-		{	JOptionPane.showMessageDialog( null, "Write Failed!",
+		catch (IOException e) {
+			JOptionPane.showMessageDialog(null, "Write Failed!",
 					"The Game of Life", JOptionPane.ERROR_MESSAGE);
 		}
 	}
@@ -213,14 +177,16 @@ public class Universe extends JPanel
 
 	public void paint(Graphics g)
 	{
-		Rectangle panelBounds = getBounds();
-		Rectangle clipBounds  = g.getClipBounds();
+		drawBoard(g, true);
+	}
 
-		// The panel bounds is relative to the upper-left
-		// corner of the screen. Pretend that it's at (0,0)
-		panelBounds.x = 0;
-		panelBounds.y = 0;
-		outermostCell.redraw(g, panelBounds, true);		//{=Universe.redraw1}
+	private void drawBoard(Graphics g, boolean drawAll)
+	{
+		Rectangle bounds = new Rectangle(0, 0, getWidth(), getHeight());
+		// 타이머가 보드를 바꾸는 도중에는 같은 보드를 그리지 않는다.
+		synchronized (model) {
+			boardToDraw.redraw(g, bounds, drawAll);
+		}
 	}
 
 	/** Force a screen refresh by queing a request on
@@ -241,10 +207,7 @@ public class Universe extends JPanel
 						return;
 					try
 					{
-						Rectangle panelBounds = getBounds();
-						panelBounds.x = 0;
-						panelBounds.y = 0;
-						outermostCell.redraw(g, panelBounds, false); //{=Universe.redraw2}
+						drawBoard(g, false); //{=Universe.redraw2}
 					}
 					finally
 					{	g.dispose();
