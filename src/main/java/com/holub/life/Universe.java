@@ -8,6 +8,7 @@ import java.awt.event.*;
 
 import com.holub.life.format.PatternFileActions;
 import com.holub.ui.MenuSite;
+import com.holub.life.control.GameController;
 
 /**
  * Swing 입력을 모델에 전달하고 기존 보드를 그리는 패널.
@@ -19,6 +20,8 @@ public class Universe extends JPanel
 	private final Neighborhood boardToDraw;
 	private final BoardModel model;
 	private final PatternFileActions patternActions;
+	/** 실행 상태(편집·실행·일시정지)를 관리한다. Life에서 연결한다. */
+	private GameController controller;
 	private static final Universe theInstance = new Universe();
 
 	/** The size of the smallest "atomic" cell---a Resident object.
@@ -32,8 +35,12 @@ public class Universe extends JPanel
 		// 같은 보드를 모델이 갱신하고 패널은 기존 그리기 방식으로 표시한다.
 		model = new BoardModel();
 		boardToDraw = model.board();
+		// 불러오기·저장·패턴 배치 전에는 일시정지하고,
+		// 불러오기·패턴 배치 뒤에는 새 판이므로 편집 상태로 돌아간다.
+		// controller는 Life에서 연결되며, 메뉴를 누르는 시점에 읽는다.
 		patternActions = new PatternFileActions(this, model,
-				() -> Clock.instance().stop(), this::repaint);
+				() -> controller.pause(),
+				() -> { controller.boardReplaced(); repaint(); });
 
 		final Dimension PREFERRED_SIZE =
 						new Dimension
@@ -78,7 +85,8 @@ public class Universe extends JPanel
 					if (x < 0 || y < 0 || x >= boardPixels || y >= boardPixels) {
 						return;
 					}
-					model.toggleCell(y / pixelsPerCell, x / pixelsPerCell);
+					// 실행 중 클릭 처리는 현재 상태가 정한다.
+					controller.cellClicked(y / pixelsPerCell, x / pixelsPerCell);
 					repaint();
 				}
 			}
@@ -145,6 +153,12 @@ public class Universe extends JPanel
 	public BoardModel model()
 	{
 		return model;
+	}
+
+	/** 화면을 띄우기 전에 Life에서 한 번 연결한다. */
+	public void setController(GameController controller)
+	{
+		this.controller = controller;
 	}
 
 	/** Override paint to ask the outermost Neighborhood
