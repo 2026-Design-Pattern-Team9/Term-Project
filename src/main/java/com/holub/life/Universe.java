@@ -105,7 +105,9 @@ public class Universe extends JPanel
 		(	this, "Grid", "Load",
 			new ActionListener()
 			{	public void actionPerformed(ActionEvent e)
-				{	patternActions.load();
+				{	// 파일 선택 창이 떠 있는 동안 판이 바뀌지 않도록 먼저 멈춘다.
+					controller.pause();
+					patternActions.load();
 				}
 			}
 		);
@@ -114,7 +116,9 @@ public class Universe extends JPanel
 		(	this, "Grid", "Store",
 			new ActionListener()
 			{	public void actionPerformed(ActionEvent e)
-				{	patternActions.store();
+				{	// 저장할 판이 파일 선택 중에 바뀌지 않도록 먼저 멈춘다.
+					controller.pause();
+					patternActions.store();
 				}
 			}
 		);
