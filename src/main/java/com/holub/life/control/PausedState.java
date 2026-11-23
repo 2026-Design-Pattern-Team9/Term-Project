@@ -51,4 +51,9 @@ final class PausedState implements GameState {
     public void togglePlay(GameController game) {
         run(game, lastSpeed);
     }
+
+    @Override
+    public void undo(GameController game) {
+        game.undoOnce();
+    }
 }

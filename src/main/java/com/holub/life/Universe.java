@@ -95,7 +95,8 @@ public class Universe extends JPanel
 		MenuSite.addLine( this, "Grid", "Clear",
 			new ActionListener()
 			{	public void actionPerformed(ActionEvent e)
-				{	model.clear();
+				{	// 멈추고 비운 뒤 이력을 새로 시작하고 편집 상태로 돌아간다.
+					controller.clearBoard();
 					repaint();
 				}
 			}

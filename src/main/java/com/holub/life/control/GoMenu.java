@@ -34,6 +34,7 @@ public final class GoMenu {
         }
         // 새로 추가
         list.add(new Entry("Run/Pause (Space)", new TogglePlayCommand(game)));
+        list.add(new Entry("Undo (Cmd/Ctrl+Z)", new UndoCommand(game)));
         entries = List.copyOf(list);
     }
 

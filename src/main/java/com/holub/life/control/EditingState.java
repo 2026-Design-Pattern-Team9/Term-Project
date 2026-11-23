@@ -53,4 +53,9 @@ final class EditingState implements GameState {
     public void togglePlay(GameController game) {
         run(game, GameController.DEFAULT_SPEED);
     }
+
+    @Override
+    public void undo(GameController game) {
+        game.undoOnce();
+    }
 }

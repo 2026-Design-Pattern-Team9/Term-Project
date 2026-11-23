@@ -61,4 +61,14 @@ final class RunningState implements GameState {
     public void togglePlay(GameController game) {
         pause(game);
     }
+
+    /**
+     * 실행 중에 되돌리면 다음 틱이 복원한 판을 바로 덮어쓴다.
+     * 먼저 일시정지해서 되돌린 판을 볼 수 있게 한다.
+     */
+    @Override
+    public void undo(GameController game) {
+        pause(game);
+        game.undoOnce();
+    }
 }

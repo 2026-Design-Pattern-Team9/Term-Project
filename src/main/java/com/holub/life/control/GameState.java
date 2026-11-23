@@ -13,6 +13,7 @@ import java.util.Optional;
  * 정지          | 무시       | 일시정지로               | 무시
  * 한 세대 진행  | 진행       | 무시                     | 진행
  * 실행/정지 전환| 기본 속도로 실행 | 일시정지로         | 직전 속도로 실행
+ * 되돌리기      | 되돌리기   | 일시정지로 바꾼 뒤 되돌리기 | 되돌리기
  * </pre>
  *
  * 상태 객체는 직접 타이머나 보드를 만지지 않고 GameController가 열어 둔 동작만 호출한다.
@@ -37,4 +38,6 @@ public interface GameState {
     void step(GameController game);
 
     void togglePlay(GameController game);
+
+    void undo(GameController game);
 }

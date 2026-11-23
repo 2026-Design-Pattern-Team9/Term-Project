@@ -5,11 +5,18 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.holub.life.BoardModel;
+import com.holub.life.history.GenerationHistory;
 
 /**
  * State 패턴의 Context.
  * 마우스, 메뉴, 단축키에서 들어온 입력을 직접 판단하지 않고 현재 상태 객체에 넘긴다.
- * 상태가 바뀌면 등록된 리스너에게 알린다 (통계·상태 패널 등에서 구독).
+ * 상태가 바뀌면 StateListener에게, 판이 세대 진행 말고 다른 이유로 바뀌면
+ * BoardListener에게 알린다 (화면 다시 그리기, 통계·상태 패널 갱신).
+ *
+ * <p>잠금 순서: 세대 진행은 model → history 순서로 잠근다.
+ * 이 클래스는 컨트롤러 잠금을 잡은 채로 history.undo(model)을 부르므로
+ * 세대 완료 리스너(StepListener)에서 컨트롤러 메서드를 다시 부르지 않는다.
+ * 리스너가 현재 상태를 읽을 수 있도록 state()는 잠금 없이 읽는다.</p>
  */
 public final class GameController {
     /** 편집 상태에서 실행/정지 전환을 눌렀을 때의 속도. */
@@ -24,26 +31,46 @@ public final class GameController {
         void stateChanged(GameState state);
     }
 
-    private final BoardModel model;
-    private final Ticker ticker;
-    private final List<StateListener> listeners = new CopyOnWriteArrayList<>();
-    private GameState state = EditingState.INSTANCE;
-
-    public GameController(BoardModel model, Ticker ticker) {
-        this.model = Objects.requireNonNull(model);
-        this.ticker = Objects.requireNonNull(ticker);
+    /**
+     * 세대 진행이 아닌 이유(편집, 되돌리기, 비우기, 불러오기)로 판이 바뀌었을 때 호출된다.
+     * 세대 진행은 BoardModel의 StepListener로 알 수 있다.
+     */
+    @FunctionalInterface
+    public interface BoardListener {
+        void boardChanged();
     }
 
-    public synchronized GameState state() {
+    private final BoardModel model;
+    private final Ticker ticker;
+    private final GenerationHistory history;
+    private final List<StateListener> stateListeners = new CopyOnWriteArrayList<>();
+    private final List<BoardListener> boardListeners = new CopyOnWriteArrayList<>();
+    private volatile GameState state = EditingState.INSTANCE;
+
+    public GameController(BoardModel model, Ticker ticker, GenerationHistory history) {
+        this.model = Objects.requireNonNull(model);
+        this.ticker = Objects.requireNonNull(ticker);
+        this.history = Objects.requireNonNull(history);
+    }
+
+    public GameState state() {
         return state;
     }
 
     public void addStateListener(StateListener listener) {
-        listeners.add(Objects.requireNonNull(listener));
+        stateListeners.add(Objects.requireNonNull(listener));
     }
 
     public void removeStateListener(StateListener listener) {
-        listeners.remove(listener);
+        stateListeners.remove(listener);
+    }
+
+    public void addBoardListener(BoardListener listener) {
+        boardListeners.add(Objects.requireNonNull(listener));
+    }
+
+    public void removeBoardListener(BoardListener listener) {
+        boardListeners.remove(listener);
     }
 
     // ---------------------------------------------------------------
@@ -69,13 +96,29 @@ public final class GameController {
         state.togglePlay(this);
     }
 
+    /** 한 세대 전으로 되돌린다. 실행 중이면 먼저 일시정지한다. */
+    public synchronized void undo() {
+        state.undo(this);
+    }
+
     /**
-     * 판 전체가 바뀐 뒤(파일 불러오기 등) 호출한다.
-     * 어느 상태에서든 타이머를 멈추고 편집 상태로 돌아간다.
+     * 판 전체가 바뀐 뒤(파일 불러오기, 패턴 배치) 호출한다.
+     * 어느 상태에서든 타이머를 멈추고, 이력을 새 시작점으로 바꾸고, 편집 상태로 돌아간다.
      */
     public synchronized void boardReplaced() {
         ticker.stop();
+        history.reset(model.snapshot());
         changeState(EditingState.INSTANCE);
+        notifyBoardChanged();
+    }
+
+    /** Grid > Clear. 멈추고 판을 비운 뒤 새 판으로 취급한다. */
+    public synchronized void clearBoard() {
+        ticker.stop();
+        model.clear();
+        history.reset(model.snapshot());
+        changeState(EditingState.INSTANCE);
+        notifyBoardChanged();
     }
 
     // ---------------------------------------------------------------
@@ -93,8 +136,21 @@ public final class GameController {
         ticker.tick();
     }
 
+    /**
+     * 칸 하나를 바꾼다. 손으로 고친 판은 지난 세대들과 이어지지 않으므로
+     * 이력을 새 시작점으로 바꾼다. 그러지 않으면 되돌릴 때 고친 내용이 사라진다.
+     */
     void toggleCell(int row, int column) {
         model.toggleCell(row, column);
+        history.reset(model.snapshot());
+        notifyBoardChanged();
+    }
+
+    /** 되돌릴 이력이 있으면 한 세대 전으로 복원하고 알린다. */
+    void undoOnce() {
+        if (history.undo(model)) {
+            notifyBoardChanged();
+        }
     }
 
     void changeState(GameState next) {
@@ -102,8 +158,14 @@ public final class GameController {
             return;
         }
         state = next;
-        for (StateListener listener : listeners) {
+        for (StateListener listener : stateListeners) {
             listener.stateChanged(next);
+        }
+    }
+
+    private void notifyBoardChanged() {
+        for (BoardListener listener : boardListeners) {
+            listener.boardChanged();
         }
     }
 }
