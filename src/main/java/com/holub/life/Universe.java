@@ -29,8 +29,8 @@ public class Universe extends JPanel
 	private Universe()
 	{
 		// 같은 보드를 모델이 갱신하고 패널은 기존 그리기 방식으로 표시한다.
-		boardToDraw = BoardModel.createBoard();
-		model = new BoardModel(boardToDraw);
+		model = new BoardModel();
+		boardToDraw = model.board();
 
 		final Dimension PREFERRED_SIZE =
 						new Dimension
