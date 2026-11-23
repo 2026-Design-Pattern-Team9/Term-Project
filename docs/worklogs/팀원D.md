@@ -149,6 +149,7 @@
   - 편집 모드·실행 조작: 실행 중 칸 클릭 → `[Paused]` + 칸 유지, Space 실행/정지와 직전 속도로 재실행, → 한 세대 진행(실행 중에는 무시)
   - 되돌리기: 몇 세대 진행 후 Cmd+Z로 한 세대 전 복원, 실행 중 Cmd+Z → `[Paused]` 후 복원, 칸을 고친 뒤 Cmd+Z는 변화 없음
   - 다른 기능과 연결: 실행 중 Clear → 빈 판 `[Editing]`, 실행 중 Load·Store → 창이 뜰 때 이미 `[Paused]`, 불러온 뒤 `[Editing]`, 패턴 배치 → `[Editing]`, Rule 메뉴와 함께 정상 동작
+  - 규칙 변경 연결 (추가 확인): 메뉴바 순서 Grid, Patterns, Rule, Go 유지. 3세대 진행 후 다른 규칙 선택 → Cmd+Z 변화 없음. 같은 규칙을 다시 선택 → Cmd+Z로 한 세대 전 복원. 실행 중 규칙 변경 → `[Running]` 유지하며 계속 진행
 - 테스트 코드: `src/test/java/com/holub/life/control/`, `src/test/java/com/holub/life/RuleMenuTest.java`
 
 ### 5. 남은 일
