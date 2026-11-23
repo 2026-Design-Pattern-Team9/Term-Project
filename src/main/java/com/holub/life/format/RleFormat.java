@@ -10,14 +10,19 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Run Length Encoded(.rle) 형식. 'b'는 죽은 셀, 'o'는 살아 있는 셀, '$'는 줄 바꿈이고
- * 앞의 숫자는 반복 횟수, '!'는 끝이다. 헤더의 rule은 읽고 무시한다(Conway B3/S23로 처리).
+ * 앞의 숫자는 반복 횟수, '!'는 끝이다. 헤더의 rule은 {@link CellPattern#rule()}에 담아 두고,
+ * 저장할 때는 패턴에 담긴 규칙을 적는다(없으면 B3/S23).
  */
 public final class RleFormat implements PatternFormat {
     static final int MAX_RUN = 100_000;
     private static final int LINE_WIDTH = 70;
+    private static final String DEFAULT_RULE = "B3/S23";
+    private static final Pattern RULE = Pattern.compile("rule\\s*=\\s*([^,\\s]+)", Pattern.CASE_INSENSITIVE);
 
     @Override
     public String description() {
@@ -38,6 +43,7 @@ public final class RleFormat implements PatternFormat {
     public CellPattern read(InputStream in) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
         String name = "rle";
+        String rule = null;
         StringBuilder body = new StringBuilder();
         boolean sawHeader = false;
         String line;
@@ -57,6 +63,10 @@ public final class RleFormat implements PatternFormat {
                     throw new IOException("Missing header line in rle file");
                 }
                 sawHeader = true;
+                Matcher header = RULE.matcher(line);
+                if (header.find()) {
+                    rule = header.group(1);
+                }
                 continue;
             }
             body.append(line);
@@ -68,7 +78,7 @@ public final class RleFormat implements PatternFormat {
             throw new IOException("Missing header line in rle file");
         }
 
-        CellPattern pattern = new CellPattern(name);
+        CellPattern pattern = new CellPattern(name).withRule(rule);
         int row = 0;
         int column = 0;
         int count = 0;
@@ -136,7 +146,8 @@ public final class RleFormat implements PatternFormat {
 
         Writer writer = new OutputStreamWriter(out, StandardCharsets.UTF_8);
         writer.write("#N " + pattern.name() + "\n");
-        writer.write("x = " + shape.width() + ", y = " + shape.height() + ", rule = B3/S23\n");
+        String rule = pattern.rule() == null ? DEFAULT_RULE : pattern.rule();
+        writer.write("x = " + shape.width() + ", y = " + shape.height() + ", rule = " + rule + "\n");
         int lineLength = 0;
         for (String token : tokens) {
             if (lineLength + token.length() > LINE_WIDTH) {

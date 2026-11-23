@@ -80,6 +80,62 @@ class PatternFormatsTest {
         assertThrows(IOException.class, () -> rle.read(text("x = 1, y = 1\n99999999999o!\n"))); // 너무 긴 반복
     }
 
+    // ---- 규칙 헤더 ----
+
+    @Test
+    void rleKeepsTheRuleWrittenInTheHeader() throws IOException {
+        assertEquals("B36/S23", new RleFormat().read(text("x = 1, y = 1, rule = B36/S23\no!\n")).rule());
+        assertEquals("B36/S23", new RleFormat().read(text("x = 1, y = 1,rule=B36/S23\no!\n")).rule());
+        assertNull(new RleFormat().read(text("x = 1, y = 1\no!\n")).rule());
+    }
+
+    @Test
+    void rleWritesTheRuleOfThePatternAndDefaultsToConway() throws IOException {
+        CellPattern highLife = CellPattern.of("p", "O").withRule("B36/S23");
+        assertEquals("B36/S23", roundTrip(new RleFormat(), highLife).rule());
+        assertEquals("B3/S23", roundTrip(new RleFormat(), CellPattern.of("p", "O")).rule());
+        assertEquals("B36/S23", highLife.copy().rule());
+    }
+
+    @Test
+    void fileRuleIsAppliedQuietlyWhenItDiffersFromTheBoardRule() {
+        BoardModel model = new BoardModel();
+        model.setRule(com.holub.life.Rules.SEEDS);
+
+        PatternFileActions.RuleChange change = PatternFileActions.applyFileRule(model,
+                CellPattern.of("p", "O").withRule("B3/S23"));
+
+        assertEquals(com.holub.life.Rules.CONWAY, model.rule());
+        assertNull(change.message());
+        assertFalse(change.unsupported());
+    }
+
+    @Test
+    void lifeIsAnotherNameForConwayAndMissingRuleChangesNothing() {
+        BoardModel model = new BoardModel();
+        model.setRule(com.holub.life.Rules.HIGHLIFE);
+
+        PatternFileActions.applyFileRule(model, CellPattern.of("p", "O"));
+        assertEquals(com.holub.life.Rules.HIGHLIFE, model.rule());
+
+        PatternFileActions.applyFileRule(model, CellPattern.of("p", "O").withRule("Life"));
+        assertEquals(com.holub.life.Rules.CONWAY, model.rule());
+    }
+
+    @Test
+    void unsupportedFileRuleKeepsTheCurrentRuleAndWarns() {
+        BoardModel model = new BoardModel();
+        model.setRule(com.holub.life.Rules.SEEDS);
+
+        for (String written : new String[] {"23/3", "B0/S", "Generations", "B3/S23V"}) {
+            PatternFileActions.RuleChange change = PatternFileActions.applyFileRule(model,
+                    CellPattern.of("p", "O").withRule(written));
+            assertEquals(com.holub.life.Rules.SEEDS, model.rule(), written);
+            assertTrue(change.unsupported(), written);
+            assertTrue(change.message().contains(written), written);
+        }
+    }
+
     // ---- Plaintext ----
 
     @Test

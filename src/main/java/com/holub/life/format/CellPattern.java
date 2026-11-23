@@ -19,9 +19,23 @@ import com.holub.life.BoardModel;
 public final class CellPattern {
     private final String name;
     private final Set<Point> cells = new LinkedHashSet<>();
+    private String rule;
 
     public CellPattern(String name) {
         this.name = Objects.requireNonNull(name);
+    }
+
+    /**
+     * 파일 헤더에 적힌 규칙 표기(예: "B3/S23"). 규칙 정보가 없는 형식이면 null.
+     * 어떤 규칙인지 해석하는 일은 이 클래스가 아니라 불러오는 쪽이 한다.
+     */
+    public String rule() {
+        return rule;
+    }
+
+    public CellPattern withRule(String rule) {
+        this.rule = rule;
+        return this;
     }
 
     /** 사람이 읽기 쉬운 모양으로 패턴을 만든다. 'O' 또는 '*'가 살아 있는 셀이다. */
@@ -81,7 +95,7 @@ public final class CellPattern {
 
     /** Prototype: 셀 좌표까지 새로 복제한다. */
     public CellPattern copy() {
-        CellPattern copy = new CellPattern(name);
+        CellPattern copy = new CellPattern(name).withRule(rule);
         for (Point cell : cells) {
             copy.cells.add(new Point(cell));
         }

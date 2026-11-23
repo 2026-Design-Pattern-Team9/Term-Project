@@ -16,6 +16,8 @@ import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import com.holub.life.BoardModel;
+import com.holub.life.Rule;
+import com.holub.life.Rules;
 import com.holub.ui.MenuSite;
 
 /**
@@ -67,17 +69,30 @@ public final class PatternFileActions {
                 pattern = format.read(in);
             }
             beforeChange.run();
+            RuleChange ruleChange = applyFileRule(model, pattern);
             model.clear();
             int placed = format.preservesPosition()
                     ? pattern.placeAsIs(model)
                     : pattern.placeCentered(model);
             afterChange.run();
+
+            StringBuilder notes = new StringBuilder();
+            if (ruleChange.message() != null) {
+                notes.append(ruleChange.message());
+            }
             if (placed < pattern.size()) {
-                JOptionPane.showMessageDialog(parent,
-                        (pattern.size() - placed) + " of " + pattern.size()
-                                + " live cells were outside the " + model.size() + "x" + model.size()
-                                + " board and were not loaded.\nSaving now would lose them.",
-                        TITLE, JOptionPane.WARNING_MESSAGE);
+                if (notes.length() > 0) {
+                    notes.append("\n\n");
+                }
+                notes.append(pattern.size() - placed).append(" of ").append(pattern.size())
+                        .append(" live cells were outside the ")
+                        .append(model.size()).append("x").append(model.size())
+                        .append(" board and were not loaded.\nSaving now would lose them.");
+            }
+            if (notes.length() > 0) {
+                boolean warning = placed < pattern.size() || ruleChange.unsupported();
+                JOptionPane.showMessageDialog(parent, notes.toString(), TITLE,
+                        warning ? JOptionPane.WARNING_MESSAGE : JOptionPane.INFORMATION_MESSAGE);
             }
         } catch (IOException e) {
             error("Read Failed!\n" + e.getMessage());
@@ -124,7 +139,8 @@ public final class PatternFileActions {
             }
 
             beforeChange.run();
-            CellPattern pattern = CellPattern.fromBoard(baseName(target), model.snapshot());
+            CellPattern pattern = CellPattern.fromBoard(baseName(target), model.snapshot())
+                    .withRule(model.rule().notation());
             try (OutputStream out = new FileOutputStream(target)) {
                 format.write(pattern, out);
             }
@@ -144,6 +160,56 @@ public final class PatternFileActions {
         beforeChange.run();
         library.create(name).placeCentered(model);
         afterChange.run();
+    }
+
+    /** 사용자에게 알릴 문구(없으면 null). 파일의 규칙을 쓰지 못했을 때만 문구가 있다. */
+    record RuleChange(String message, boolean unsupported) {
+        static final RuleChange NONE = new RuleChange(null, false);
+    }
+
+    /**
+     * 파일에 규칙이 적혀 있고 현재 규칙과 다르면 보드의 규칙을 파일의 규칙으로 조용히 바꾼다.
+     * 해석할 수 없는 규칙이면 현재 규칙을 그대로 두고 그 사실을 알린다.
+     */
+    static RuleChange applyFileRule(BoardModel model, CellPattern pattern) {
+        String written = pattern.rule();
+        if (written == null) {
+            return RuleChange.NONE;
+        }
+        Rule fileRule = resolveRule(written);
+        Rule current = model.rule();
+        if (fileRule == null) {
+            return new RuleChange("This file uses the rule \"" + written
+                    + "\", which this game does not support.\nThe current rule "
+                    + describe(current) + " is kept.", true);
+        }
+        if (fileRule.equals(current)) {
+            return RuleChange.NONE;
+        }
+        model.setRule(fileRule);
+        return new RuleChange(null, false);     // 규칙을 맞췄을 뿐이라 따로 알리지 않는다.
+    }
+
+    /** "Life"는 Conway의 다른 이름이다. 해석할 수 없는 표기는 null. */
+    static Rule resolveRule(String written) {
+        if (written.equalsIgnoreCase("Life")) {
+            return Rules.CONWAY;
+        }
+        try {
+            return Rules.parse(written);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** 메뉴에 있는 이름이 있으면 "HighLife (B36/S23)", 없으면 표기만. */
+    static String describe(Rule rule) {
+        for (Map.Entry<String, Rule> preset : Rules.presets().entrySet()) {
+            if (preset.getValue().equals(rule)) {
+                return preset.getKey() + " (" + rule.notation() + ")";
+            }
+        }
+        return rule.notation();
     }
 
     private void error(String message) {
