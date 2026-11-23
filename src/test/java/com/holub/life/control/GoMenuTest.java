@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import com.holub.life.BoardModel;
 import com.holub.life.control.GameState.Mode;
+import com.holub.life.history.GenerationHistory;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -17,15 +18,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class GoMenuTest {
     private final BoardModel model = new BoardModel();
     private final RecordingTicker ticker = new RecordingTicker();
-    private final GameController game = new GameController(model, ticker);
+    private final GameController game =
+            new GameController(model, ticker, new GenerationHistory(20, model.snapshot()));
     private final GoMenu menu = new GoMenu(game);
 
     @Test
-    void keepsTheOriginalMenuNamesInOrderAndAddsRunPause() {
+    void keepsTheOriginalMenuNamesInOrderAndAddsRunPauseAndUndo() {
         List<String> names = menu.entries().stream().map(GoMenu.Entry::name).toList();
 
         assertEquals(List.of("Halt", "Tick (Single Step)", "Agonizing", "Slow", "Medium", "Fast",
-                "Run/Pause (Space)"), names);
+                "Run/Pause (Space)", "Undo (Cmd/Ctrl+Z)"), names);
     }
 
     /** 원본 Clock은 메뉴 이름 첫 글자로 A=500, S=150, M=70, F=30 ms를 골랐다. */
