@@ -7,6 +7,8 @@ import com.holub.life.control.GameController;
 import com.holub.life.control.GoMenu;
 import com.holub.life.control.KeyBindings;
 import com.holub.life.history.GenerationHistory;
+import com.holub.life.stats.StatsConnector;
+import com.holub.life.stats.StatsPanel;
 
 /*******************************************************************
  * An implemenation of Conway's Game of Life.
@@ -53,23 +55,22 @@ public final class Life extends JFrame
 		Universe.instance().setController( controller );
 		// 되돌리기·비우기처럼 세대 진행이 아닌 이유로 판이 바뀌면 다시 그린다.
 		controller.addBoardListener( () -> Universe.instance().repaint() );
+		// 통계는 이력을 등록한 뒤에 연결해야 history.period()가 방금 끝난 세대를 반영한다.
+		StatsConnector statsConnector = StatsConnector.connect( model, history, controller );
+		StatsPanel statsPanel = new StatsPanel( statsConnector.stats() );
+		getContentPane().add( statsPanel, BorderLayout.SOUTH );
 		// 규칙이 바뀌면 이전 규칙으로 계산한 세대와 섞이지 않도록 이력을 새로 시작한다.
 		// 메뉴바 순서(Grid, Patterns, Rule, Go)를 유지하도록 Go 메뉴보다 먼저 등록한다.
-		RuleMenu.install( model, controller::ruleChanged );
+		RuleMenu.install( model,
+				() -> { controller.ruleChanged(); statsConnector.ruleChanged(); } );
 		new GoMenu( controller ).install();
 		KeyBindings.install( getRootPane(), controller );
 
-		// 현재 상태를 제목 표시줄에 보여준다. (상태 패널이 생기면 그쪽에서 구독)
-		showState( controller );
-		controller.addStateListener
-		(	state -> SwingUtilities.invokeLater( () -> showState( controller ) )
-		);
+		// 현재 상태(편집/실행/일시정지)는 통계 패널에 보여준다.
+		statsPanel.setGameState( controller.state().displayName() );
+		controller.addStateListener( state -> statsPanel.setGameState( state.displayName() ) );
 
 		pack();
 		setVisible( true );
-	}
-
-	private void showState( GameController controller )
-	{	setTitle( TITLE + "  [" + controller.state().displayName() + "]" );
 	}
 }
