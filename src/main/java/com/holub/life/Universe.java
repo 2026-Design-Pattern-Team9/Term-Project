@@ -6,7 +6,7 @@ import java.awt.*;
 import javax.swing.*;
 import java.awt.event.*;
 
-import com.holub.io.Files;
+import com.holub.life.format.PatternFileActions;
 import com.holub.ui.MenuSite;
 
 /**
@@ -18,6 +18,7 @@ public class Universe extends JPanel
 {
 	private final Neighborhood boardToDraw;
 	private final BoardModel model;
+	private final PatternFileActions patternActions;
 	private static final Universe theInstance = new Universe();
 
 	/** The size of the smallest "atomic" cell---a Resident object.
@@ -31,6 +32,8 @@ public class Universe extends JPanel
 		// 같은 보드를 모델이 갱신하고 패널은 기존 그리기 방식으로 표시한다.
 		model = new BoardModel();
 		boardToDraw = model.board();
+		patternActions = new PatternFileActions(this, model,
+				() -> Clock.instance().stop(), this::repaint);
 
 		final Dimension PREFERRED_SIZE =
 						new Dimension
@@ -94,7 +97,7 @@ public class Universe extends JPanel
 		(	this, "Grid", "Load",
 			new ActionListener()
 			{	public void actionPerformed(ActionEvent e)
-				{	doLoad();
+				{	patternActions.load();
 				}
 			}
 		);
@@ -103,10 +106,12 @@ public class Universe extends JPanel
 		(	this, "Grid", "Store",
 			new ActionListener()
 			{	public void actionPerformed(ActionEvent e)
-				{	doStore();
+				{	patternActions.store();
 				}
 			}
 		);
+
+		patternActions.installPresetMenu(this);
 
 		MenuSite.addLine
 		(	this, "Grid", "Exit",
@@ -140,33 +145,6 @@ public class Universe extends JPanel
 	public BoardModel model()
 	{
 		return model;
-	}
-
-	private void doLoad()
-	{
-		try (FileInputStream in = new FileInputStream(
-				Files.userSelected(".", ".life", "Life File", "Load"))) {
-			Clock.instance().stop();
-			model.load(in);
-		}
-		catch (IOException e) {
-			JOptionPane.showMessageDialog(null, "Read Failed!",
-					"The Game of Life", JOptionPane.ERROR_MESSAGE);
-		}
-		repaint();
-	}
-
-	private void doStore()
-	{
-		try (FileOutputStream out = new FileOutputStream(
-				Files.userSelected(".", ".life", "Life File", "Write"))) {
-			Clock.instance().stop();
-			model.store(out);
-		}
-		catch (IOException e) {
-			JOptionPane.showMessageDialog(null, "Write Failed!",
-					"The Game of Life", JOptionPane.ERROR_MESSAGE);
-		}
 	}
 
 	/** Override paint to ask the outermost Neighborhood
