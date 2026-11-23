@@ -69,17 +69,25 @@ public final class GenerationHistory implements BoardModel.StepListener {
     }
 
     /** 현재 커서가 가리키는 상태를 복원하고 한 단계 이전으로 이동한다. */
-    public synchronized boolean undo(BoardModel model) {
+    public boolean undo(BoardModel model) {
         Objects.requireNonNull(model);
-        if (!canUndo()) {
-            return false;
+
+        // BoardModel.step() holds the model lock while it notifies this
+        // listener, which then takes the history lock.  Take the locks in
+        // that same order here to prevent a step/undo deadlock.
+        synchronized (model) {
+            synchronized (this) {
+                if (!canUndo()) {
+                    return false;
+                }
+                cursor--;
+                BoardModel.Snapshot target = snapshots.get(cursor);
+                model.restore(target);
+                period = periodDetector.detect(snapshots.subList(0, cursor + 1), target)
+                        .orElse(null);
+                return true;
+            }
         }
-        cursor--;
-        BoardModel.Snapshot target = snapshots.get(cursor);
-        model.restore(target);
-        period = periodDetector.detect(snapshots.subList(0, cursor + 1), target)
-                .orElse(null);
-        return true;
     }
 
     public synchronized boolean canUndo() {
