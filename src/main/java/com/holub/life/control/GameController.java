@@ -112,6 +112,15 @@ public final class GameController {
         notifyBoardChanged();
     }
 
+    /**
+     * 규칙이 바뀐 뒤 호출한다. 이전 규칙으로 계산한 세대와 섞이지 않도록 이력을 새로 시작한다.
+     * 실행 중이어도 멈추지 않고 다음 세대부터 새 규칙으로 계산한다 (B의 설계).
+     */
+    public synchronized void ruleChanged() {
+        history.reset(model.snapshot());
+        notifyBoardChanged();
+    }
+
     /** Grid > Clear. 멈추고 판을 비운 뒤 새 판으로 취급한다. */
     public synchronized void clearBoard() {
         ticker.stop();

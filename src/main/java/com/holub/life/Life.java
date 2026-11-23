@@ -38,7 +38,6 @@ public final class Life extends JFrame
 		setDefaultCloseOperation	( EXIT_ON_CLOSE 		);
 		getContentPane().setLayout	( new BorderLayout()	);
 		getContentPane().add( Universe.instance(), BorderLayout.CENTER); //{=life.java.install}
-		RuleMenu.install( Universe.instance().model() );
 
 		// 보드와 세대 이력은 여기서 한 번만 만들고 필요한 객체에 전달한다.
 		BoardModel model = Universe.instance().model();
@@ -54,6 +53,9 @@ public final class Life extends JFrame
 		Universe.instance().setController( controller );
 		// 되돌리기·비우기처럼 세대 진행이 아닌 이유로 판이 바뀌면 다시 그린다.
 		controller.addBoardListener( () -> Universe.instance().repaint() );
+		// 규칙이 바뀌면 이전 규칙으로 계산한 세대와 섞이지 않도록 이력을 새로 시작한다.
+		// 메뉴바 순서(Grid, Patterns, Rule, Go)를 유지하도록 Go 메뉴보다 먼저 등록한다.
+		RuleMenu.install( model, controller::ruleChanged );
 		new GoMenu( controller ).install();
 		KeyBindings.install( getRootPane(), controller );
 

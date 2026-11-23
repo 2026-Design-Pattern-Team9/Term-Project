@@ -250,6 +250,22 @@ class GameControllerTest {
         assertEquals(1, boardChanges);
     }
 
+    /** 규칙 변경은 실행을 멈추지 않고(B의 설계) 이력만 새로 시작한다. */
+    @Test
+    void ruleChangedStartsANewHistoryWithoutStoppingTheRun() {
+        placeHorizontalBlinker();
+        game.run(Speed.SLOW);
+        ticker.tick();
+        ticker.tick();
+
+        game.ruleChanged();
+
+        assertEquals(Mode.RUNNING, game.state().mode());
+        assertEquals(0, ticker.stopCount);
+        assertFalse(history.canUndo());
+        assertEquals(1, boardChanges);
+    }
+
     /** 실제 Clock 대신 쓰는 타이머. 자동 진행은 하지 않고 호출만 기록한다. */
     private static final class FakeTicker implements Ticker {
         private final BoardModel model;
