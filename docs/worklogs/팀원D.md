@@ -85,6 +85,7 @@
 - 원본과 E 모두 파일을 고른 **뒤에** 멈춘다. 그래서 파일 선택 창이 떠 있는 동안 판이 계속 진행되고, 저장하려던 판과 실제로 저장되는 판이 달라질 수 있다. (`Grid` 메뉴를 열었을 때 멈추는 것은 원본 v1.02의 `menuIsActive()` 우회 코드 때문이며, 메뉴가 닫히면 다시 진행된다.)
 - C·D·F 연결 규격에서 Undo 버튼과 Command, Undo 뒤 화면·패널 갱신을 D가 맡았다. `history.undo(model)`은 세대 완료 알림을 보내지 않으므로 갱신을 따로 알려야 한다.
 - 규격의 담당표에 Clear 뒤 `history.reset()`을 부를 사람이 없었다. 칸을 손으로 고친 뒤의 이력 처리도 정해지지 않았다.
+- B의 Rule 메뉴는 규칙만 바꾸고 이력을 초기화하지 않았다. 이전 규칙으로 계산한 세대가 이력에 남아, 되돌리면 판은 예전 규칙 시절로 돌아가는데 규칙은 그대로여서 이후 진행과 반복 주기 감지가 섞인다. B는 이미 머지된 상태라 D에서 연결했다.
 
 ### 2. 변경 내용
 
@@ -97,7 +98,9 @@
   - `GameController`: 생성자에서 `GenerationHistory`를 받는다. `undo()`, `clearBoard()` 추가. `boardReplaced()`와 칸 편집 뒤 `history.reset(model.snapshot())`. 세대 진행이 아닌 이유로 판이 바뀌면 `BoardListener`에 알린다.
   - `UndoCommand` (신규), `GoMenu`에 `Undo (Cmd/Ctrl+Z)`, `KeyBindings`에 Cmd/Ctrl+Z (`getMenuShortcutKeyMaskEx()`로 Mac은 Cmd, 그 외는 Ctrl).
   - `Universe`: E의 콜백을 `controller.pause()` / `controller.boardReplaced()` + `repaint()`로 연결. Load·Store 메뉴에서 파일 창을 띄우기 **전에** `controller.pause()`. `Grid > Clear`는 `controller.clearBoard()`.
-  - `Life`: `GenerationHistory`(보관 20개)를 한 번 만들어 `model.addStepListener(history)`로 등록하고 컨트롤러에 전달. 판 변경 알림을 받으면 `Universe`를 다시 그린다.
+  - `Life`: `GenerationHistory`(보관 20개)를 한 번 만들어 `model.addStepListener(history)`로 등록하고 컨트롤러에 전달. 판 변경 알림을 받으면 `Universe`를 다시 그린다. `RuleMenu`는 컨트롤러를 만든 뒤 등록한다 (메뉴바 순서 Grid, Patterns, Rule, Go는 그대로).
+  - `RuleMenu` (B): `install(model, afterRuleChange)` 추가. 규칙이 실제로 바뀌었을 때만 콜백을 부른다. 기존 `install(model)`과 메뉴 동작은 그대로다.
+  - `GameController.ruleChanged()`: 이력을 새로 시작하고 판 변경 알림. 실행 중이어도 멈추지 않는다.
 - 변경 전과 후
 
 | 상황 | 전 | 후 |
@@ -106,12 +109,14 @@
 | 파일 선택 창이 떠 있는 동안 | 판이 계속 진행 | 창을 띄우기 전에 `[Paused]` (취소해도 일시정지 유지) |
 | 실행 중 Clear | 계속 실행 (원본과 같음) | 멈추고 비운 뒤 `[Editing]`, 이력 초기화 |
 | 되돌리기 | 없음 | 한 세대씩 되돌리기 (최대 19세대 전까지) |
+| Rule 메뉴로 규칙 변경 | 이력 유지 (다른 규칙의 세대가 섞임) | 이력 새로 시작, 실행은 계속 |
 
 - 다른 담당자와 연결한 부분
   - **C**: `history.undo(model)`, `history.reset(snapshot)` 사용. C의 `undo()`가 model → history 순서로 잠그도록 리뷰에서 수정 요청 후 반영됨.
   - **E**: `PatternFileActions`의 `beforeChange`/`afterChange` 자리에 연결. E 클래스 자체는 바꾸지 않았다.
   - **F**: 상태는 `addStateListener()`, 되돌리기·Clear·불러오기 같은 판 변경은 `addBoardListener()`로 구독. F의 `StepListener`는 `Life`에서 `history`보다 **뒤에** 등록해야 `history.period()`가 최신 세대를 반영한다.
-  - **B**: 규칙을 바꾼 뒤 `history.reset()`은 규격상 B 담당. 현재 `RuleMenu`는 `history`를 받지 않는다.
+  - **B**: `RuleMenu`에 "규칙을 바꾼 뒤" 콜백 자리를 추가하고 `controller.ruleChanged()`를 연결했다. 규격상 B 담당이었지만 B가 머지된 뒤라 D에서 처리했다.
+  - **A**: `Universe`의 마우스 클릭(`model.toggleCell` → `controller.cellClicked`)과 Clear(`model.clear` → `controller.clearBoard`)를 컨트롤러 호출로 바꿨다.
 
 ### 3. 설계 결정
 
@@ -120,6 +125,7 @@
 - **칸 편집 뒤 이력 초기화**: 손으로 고친 판은 지난 세대들과 이어지지 않는다. 이력을 그대로 두면 되돌릴 때 고친 내용이 사라진다. C의 테스트 이름(`resetStartsASeparateHistoryAfterEditingOrLoading`)과도 같은 방향이다. 대안으로 편집도 이력에 기록해 되돌릴 수 있게 하는 방법이 있지만, C의 이력은 세대 단위라 편집 단위 되돌리기와 섞으면 세대 번호와 주기 감지가 꼬인다.
 - **판 변경 알림을 따로 둔 이유**: 되돌리기·Clear는 세대 완료 알림이 없다. D가 F의 패널을 직접 부르면 D가 F에 묶이므로, 컨트롤러가 `BoardListener`로 알리고 `Universe`(다시 그리기)와 F(패널)가 각자 구독한다 (Observer).
 - **잠금 순서**: 세대 진행은 model → history 순서다. 컨트롤러는 자기 잠금을 잡은 채로 `history.undo(model)`을 부르므로, 세대 완료 리스너 안에서 컨트롤러를 다시 부르면 순서가 꼬일 수 있다. 그래서 `state()`는 잠금 없이 읽도록 했다 (`volatile`).
+- **규칙 변경 뒤 이력 초기화**: `BoardModel`에 규칙 변경 알림을 추가하고 C가 구독하는 방법은 A의 모델 API를 바꿔야 한다. 그냥 두고 한계로 적는 방법은 되돌리기가 엉뚱하게 동작하는 걸 알면서 두는 것이다. E가 이미 쓰고 있는 "바꾼 뒤 콜백" 방식을 `RuleMenu`에도 열어서 변경을 가장 작게 했다. 같은 규칙을 다시 고르면 이력을 지우지 않도록 실제로 바뀌었을 때만 콜백을 부른다. RLE 파일의 규칙 헤더로 규칙이 바뀌는 경우는 불러오기 뒤 `boardReplaced()`에서 이미 초기화된다.
 - **파일 창 전에 일시정지**: E 클래스 안에서 `beforeChange`를 창보다 앞으로 옮기는 방법도 있었지만, `beforeChange`는 "보드를 바꾸기 직전"이라는 의미라 저장에는 맞지 않고 E 코드를 바꿔야 한다. "언제 멈출지"는 실행 상태 관리 책임이라 `Universe` 메뉴에서 D가 처리했다.
 
 ### 4. 테스트
@@ -133,20 +139,21 @@
 | 불러오기·패턴 배치 후 | 이력 초기화, 판 변경 알림 | 통과 |
 | Clear | 정지, 편집 상태, 0세대 빈 판, 이력 초기화, 알림 | 통과 |
 | Go 메뉴 | 원본 6개 + Run/Pause + Undo | 통과 |
+| 규칙 변경 (컨트롤러) | 실행 중 규칙을 바꾸면 실행은 계속되고 이력만 새로 시작, 알림 1번 | 통과 |
+| 규칙 변경 (Rule 메뉴) | 다른 규칙 → 이력 초기화, 판·세대 번호 유지 / 같은 규칙 → 이력 유지 / 콜백은 실제로 바뀔 때만 | 통과 |
 | **실행 중 동시 되돌리기** | 한 스레드는 `model.step()`, 다른 스레드는 `game.undo()`를 반복해도 교착 없음, 두 스레드 모두 실행됨 | 통과 (5회 반복) |
 
-- `GameControllerTest` 16개(6개 추가), `GoMenuTest` 4개, `UndoWhileRunningTest` 1개. A·B·C·E 테스트를 포함해 전체 89개 통과.
+- `GameControllerTest` 17개(7개 추가), `GoMenuTest` 4개, `UndoWhileRunningTest` 1개, `RuleMenuTest` 3개. A·B·C·E 테스트를 포함해 전체 93개 통과.
 - 실제 창 확인 (Swing 창 실행, 14개 항목): 실행 중 Store 시 파일 선택 창이 떠 있는 동안 판이 진행되는 문제(위 1번)를 실제 창에서 발견해 고쳤다. 수정 후 아래 항목이 모두 기대대로 동작했다.
   - 기존 기능: 시작 시 `[Editing]`, Go 메뉴 원본 항목·순서, Tick, 속도 변경, Halt, Load/Store, 메뉴가 열린 동안 틱 정지
   - 편집 모드·실행 조작: 실행 중 칸 클릭 → `[Paused]` + 칸 유지, Space 실행/정지와 직전 속도로 재실행, → 한 세대 진행(실행 중에는 무시)
   - 되돌리기: 몇 세대 진행 후 Cmd+Z로 한 세대 전 복원, 실행 중 Cmd+Z → `[Paused]` 후 복원, 칸을 고친 뒤 Cmd+Z는 변화 없음
   - 다른 기능과 연결: 실행 중 Clear → 빈 판 `[Editing]`, 실행 중 Load·Store → 창이 뜰 때 이미 `[Paused]`, 불러온 뒤 `[Editing]`, 패턴 배치 → `[Editing]`, Rule 메뉴와 함께 정상 동작
-- 테스트 코드: `src/test/java/com/holub/life/control/`
+- 테스트 코드: `src/test/java/com/holub/life/control/`, `src/test/java/com/holub/life/RuleMenuTest.java`
 
 ### 5. 남은 일
 
 - 문서·영상용 스크린샷 (실행 중 클릭 → 칸 유지, 실행 중 Undo → `[Paused]`)
 - 작업 브랜치는 컨벤션에 맞춰 `feature/d-run-control`로 바꿨다. 이슈 작성 → PR
-- **B**: 규칙 변경 뒤 `history.reset()` 연결 확인
 - **F**: 상태 패널 연결 시 `addStateListener()`, `addBoardListener()` 구독, `StepListener`는 `history` 뒤에 등록. 패널이 생기면 제목 표시줄 상태 표시는 뺄 수 있다.
 - 제출용 상태 다이어그램(편집 ↔ 실행 ↔ 일시정지)과 시퀀스 다이어그램(실행 중 Undo: 입력 → 컨트롤러 → 실행 상태 → 일시정지 → `history.undo` → 다시 그리기)
