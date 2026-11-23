@@ -138,7 +138,7 @@ class StatsConnectorTest {
     void boardReplacedAtGenerationZeroEmptiesTheStats() {
         drawBlinker();
         model.step();
-        model.clear();  // 파일 불러오기와 패턴 불러오기도 clear()로 시작해 0세대가 된다
+        model.clear();  // 파일 불러오기는 clear()로 시작해 0세대가 된다
 
         controller.boardReplaced();
 

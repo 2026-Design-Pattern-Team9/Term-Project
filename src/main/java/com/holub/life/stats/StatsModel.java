@@ -45,7 +45,10 @@ public final class StatsModel {
         notifyListeners(state);
     }
 
-    /** 최근 값과 누적을 모두 지운다. Clear, Load, 규칙 변경, 패턴 배치 뒤에 호출한다. */
+    /**
+     * 최근 값과 누적을 모두 지운다. 규칙 변경 뒤에 호출한다. Clear와 파일 Load는 세대가 0이 되므로
+     * {@link #rewindTo}로도 같은 결과가 된다.
+     */
     public void reset() {
         State state;
         synchronized (this) {
