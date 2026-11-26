@@ -86,6 +86,31 @@ class GenerationHistoryTest {
     }
 
     @Test
+    void undoRecomputesThePeriodAtTheRestoredGeneration() {
+        BoardModel model = new BoardModel();
+        setAlive(model, new Point(8, 6), new Point(8, 7), new Point(8, 8));
+        GenerationHistory history = new GenerationHistory(6, model.snapshot());
+        model.addStepListener(history);
+
+        model.step();
+        model.step();
+        model.step();
+        PeriodDetectionResult beforeUndo = history.period().orElseThrow();
+        assertEquals(3, beforeUndo.currentGeneration());
+
+        // 되돌린 2세대 기준으로 다시 판정한다. 3세대의 결과가 남아 있으면 안 된다.
+        assertTrue(history.undo(model));
+        PeriodDetectionResult afterUndo = history.period().orElseThrow();
+        assertEquals(0, afterUndo.startGeneration());
+        assertEquals(2, afterUndo.currentGeneration());
+        assertEquals(2, afterUndo.period());
+
+        // 1세대 앞에는 같은 배치가 없으므로 주기가 사라진다.
+        assertTrue(history.undo(model));
+        assertTrue(history.period().isEmpty());
+    }
+
+    @Test
     void keepsOnlyTheConfiguredNumberOfSnapshots() {
         BoardModel model = new BoardModel();
         setAlive(model, new Point(8, 6), new Point(8, 7), new Point(8, 8));
