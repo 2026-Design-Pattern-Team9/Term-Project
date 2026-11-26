@@ -1,11 +1,12 @@
 package com.holub.life.format;
 
+import java.awt.Point;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
+import java.util.HashSet;
 
 import org.junit.jupiter.api.Test;
 
@@ -191,7 +192,10 @@ class PatternFormatsTest {
     void lifeFormatRefusesUnexpectedSerializedClasses() throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ObjectOutputStream sink = new ObjectOutputStream(out)) {
-            sink.writeObject(new HashMap<String, String>());
+            // Collection이면서 허용 목록(LinkedList, ArrayList)에 없는 클래스를 쓴다.
+            // Collection이 아닌 객체(예: HashMap)는 클래스 제한이 없어도 다른 검사에서 거부되어
+            // 이 테스트가 필터를 확인하지 못한다.
+            sink.writeObject(new HashSet<Point>());
         }
         assertThrows(IOException.class,
                 () -> new LifeFileFormat().read(new ByteArrayInputStream(out.toByteArray())));
